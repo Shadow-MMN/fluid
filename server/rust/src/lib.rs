@@ -22,13 +22,16 @@ fn decode_secret(secret: &str) -> Result<[u8; 32]> {
 #[napi]
 pub async fn sign_payload(secret: String, payload: Buffer) -> Result<Buffer> {
     let secret = Zeroizing::new(secret);
+    let payload_bytes = payload.to_vec();
 
-    tokio::task::spawn_blocking(move || {
+    let signature = tokio::task::spawn_blocking(move || {
         let secret_key = Zeroizing::new(decode_secret(&secret)?);
         let signing_key = SigningKey::from_bytes(&secret_key);
-        let signature = signing_key.sign(payload.as_ref());
-        Ok(Buffer::from(signature.to_bytes().to_vec()))
+        let signature = signing_key.sign(payload_bytes.as_slice());
+        Ok::<Vec<u8>, Error>(signature.to_bytes().to_vec())
     })
     .await
-    .map_err(map_join_error)?
+    .map_err(map_join_error)??;
+
+    Ok(Buffer::from(signature))
 }

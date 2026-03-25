@@ -129,8 +129,12 @@ async function verifyParity(secret: string): Promise<void> {
   signTransactionWithNode(nodeTransaction, secret);
   await signTransaction(rustTransaction, secret);
 
-  const nodeSignature = nodeTransaction.signatures[0]?.signature().toString("base64");
-  const rustSignature = rustTransaction.signatures[0]?.signature().toString("base64");
+  const nodeSignature = Buffer.from(
+    nodeTransaction.signatures[0]?.signature() ?? []
+  ).toString("base64");
+  const rustSignature = Buffer.from(
+    rustTransaction.signatures[0]?.signature() ?? []
+  ).toString("base64");
 
   if (!nodeSignature || !rustSignature || nodeSignature !== rustSignature) {
     throw new Error("Rust and Node signers produced different signatures");
