@@ -1,13 +1,13 @@
-import { Request, Response, NextFunction } from "express";
+import { NextFunction, Request, Response } from "express";
 import StellarSdk from "@stellar/stellar-sdk";
 import { Config, pickFeePayerAccount } from "../config";
-import { FeeBumpSchema, FeeBumpRequest } from "../schemas/feeBump";
+import { AppError } from "../errors/AppError";
 import { ApiKeyConfig } from "../middleware/apiKeys";
 import { syncTenantFromApiKey } from "../models/tenantStore";
 import { recordSponsoredTransaction } from "../models/transactionLedger";
+import { FeeBumpRequest, FeeBumpSchema } from "../schemas/feeBump";
 import { checkTenantDailyQuota } from "../services/quota";
 import { transactionStore } from "../workers/transactionStore";
-import { AppError } from "../errors/AppError";
 
 import { calculateFeeBumpFee } from "../utils/feeCalculator";
 import { signTransaction, signTransactionWithVault } from "../signing";
@@ -23,22 +23,22 @@ export async function feeBumpHandler(
   req: Request,
   res: Response,
   next: NextFunction,
-  config: Config
+  config: Config,
 ): Promise<void> {
   try {
     const result = FeeBumpSchema.safeParse(req.body);
     if (!result.success) {
       console.warn(
         "Validation failed for fee-bump request:",
-        result.error.format()
+        result.error.format(),
       );
 
       return next(
         new AppError(
           `Validation failed: ${JSON.stringify(result.error.format())}`,
           400,
-          "INVALID_XDR"
-        )
+          "INVALID_XDR",
+        ),
       );
     }
 
@@ -59,7 +59,7 @@ export async function feeBumpHandler(
     } catch (error: any) {
       console.error("Failed to parse XDR:", error.message);
       return next(
-        new AppError(`Invalid XDR: ${error.message}`, 400, "INVALID_XDR")
+        new AppError(`Invalid XDR: ${error.message}`, 400, "INVALID_XDR"),
       );
     }
 
@@ -71,8 +71,8 @@ export async function feeBumpHandler(
         new AppError(
           "Inner transaction must be signed before fee-bumping",
           400,
-          "UNSIGNED_TRANSACTION"
-        )
+          "UNSIGNED_TRANSACTION",
+        ),
       );
     }
 
@@ -81,8 +81,8 @@ export async function feeBumpHandler(
         new AppError(
           "Cannot fee-bump an already fee-bumped transaction",
           400,
-          "ALREADY_FEE_BUMPED"
-        )
+          "ALREADY_FEE_BUMPED",
+        ),
       );
     }
 
@@ -93,7 +93,6 @@ export async function feeBumpHandler(
       });
       return;
     }
-
     // Extract operation count safely
     const operationCount = innerTransaction.operations?.length || 0;
     const feeAmount = calculateFeeBumpFee(
@@ -175,10 +174,11 @@ export async function feeBumpHandler(
             new AppError(
               `Transaction submission failed: ${error.message}`,
               500,
-              "SUBMISSION_FAILED"
-            )
+              "SUBMISSION_FAILED",
+            ),
           );
         });
+      return;
       return;
     }
 
