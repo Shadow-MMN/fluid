@@ -8,6 +8,8 @@ import { apiKeyMiddleware } from "./middleware/apiKeys";
 import { apiKeyRateLimit } from "./middleware/rateLimit";
 import { initializeLedgerMonitor } from "./workers/ledgerMonitor";
 import { transactionStore } from "./workers/transactionStore";
+import { notFoundHandler, globalErrorHandler } from "./middleware/errorHandler";
+import { AppError } from "./errors/AppError";
 
 dotenv.config();
 
@@ -20,7 +22,7 @@ const config = loadConfig();
 const limiter = rateLimit({
   windowMs: config.rateLimitWindowMs,
   max: config.rateLimitMax,
-  message: { error: "Too many requests from this IP, please try again later." },
+  message: { error: "Too many requests from this IP, please try again later.", code: "RATE_LIMITED" },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -54,12 +56,12 @@ app.use(cors(corsOptions));
 // Error handler for CORS rejections
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   if (err.message === "Origin not allowed by CORS") {
-    res.status(403).json({ error: "CORS not allowed" });
-    return;
+    return next(new AppError("CORS not allowed", 403, "AUTH_FAILED"));
   }
   next(err);
 });
 
+// Routes
 app.get("/health", (req: Request, res: Response) => {
   res.json({ status: "ok" });
 });
@@ -69,8 +71,8 @@ app.post(
   apiKeyMiddleware,
   apiKeyRateLimit,
   limiter,
-  (req: Request, res: Response) => {
-    feeBumpHandler(req, res, config);
+  (req: Request, res: Response, next: NextFunction) => {
+    feeBumpHandler(req, res, config, next);
   },
 );
 
@@ -89,6 +91,12 @@ app.get("/test/transactions", (req: Request, res: Response) => {
   const transactions = transactionStore.getAllTransactions();
   res.json({ transactions });
 });
+
+// 404 - must come after all routes
+app.use(notFoundHandler);
+
+// Global error handler - must be last
+app.use(globalErrorHandler);
 
 const PORT = process.env.PORT || 3000;
 
