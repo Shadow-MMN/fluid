@@ -3,6 +3,8 @@ import StellarSdk from "@stellar/stellar-sdk";
 import { transactionStore } from "../workers/transactionStore";
 import { AppError } from "../errors/AppError";
 
+import { FeeBumpSchema, FeeBumpRequest } from "../schemas/feeBump";
+import { calculateFeeBumpFee } from "../utils/feeCalculator";
 interface FeeBumpRequest {
   xdr: string;
   submit?: boolean;
@@ -50,6 +52,7 @@ export function feeBumpHandler(
     console.log(`Received fee-bump request | fee_payer: ${feePayerAccount.publicKey}`);
 
     let innerTransaction: any;
+
     try {
       innerTransaction = StellarSdk.TransactionBuilder.fromXDR(
         body.xdr,
@@ -62,7 +65,7 @@ export function feeBumpHandler(
       );
     }
 
-    if (innerTransaction.signatures.length === 0) {
+    if (!innerTransaction.signatures || innerTransaction.signatures.length === 0) {
       return next(
         new AppError(
           "Inner transaction must be signed before fee-bumping",
@@ -82,7 +85,22 @@ export function feeBumpHandler(
       );
     }
 
-    const feeAmount = Math.floor(config.baseFee * config.feeMultiplier);
+    // Extract operation count safely
+    const operationCount = innerTransaction.operations?.length || 0;
+
+    // Use extracted utility for correct fee calculation
+    const feeAmount = calculateFeeBumpFee(
+      operationCount,
+      config.baseFee,
+      config.feeMultiplier,
+    );
+
+    console.log("Fee calculation:", {
+      operationCount,
+      baseFee: config.baseFee,
+      multiplier: config.feeMultiplier,
+      finalFee: feeAmount,
+    });
 
     const feePayerKeypair = StellarSdk.Keypair.fromSecret(
       config.feePayerSecret,
@@ -104,6 +122,7 @@ export function feeBumpHandler(
 
     if (submit && config.horizonUrl) {
       const server = new StellarSdk.Horizon.Server(config.horizonUrl);
+
       server
         .submitTransaction(feeBumpTx)
         .then((result: any) => {
@@ -134,6 +153,7 @@ export function feeBumpHandler(
         status,
         fee_payer: feePayerAccount.publicKey,
       };
+
       res.json(response);
     }
   } catch (error: any) {
