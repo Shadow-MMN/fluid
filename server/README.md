@@ -137,6 +137,7 @@ npm run benchmark:signing
 ```
 
 That command builds the Rust signer, compares it against the current Node.js signing path, and writes the report to `server/benchmarks/signing-report.md`.
+The GitHub Actions benchmark workflow also writes the same report back to the feature branch after a successful run.
 
 ## Project Structure
 
